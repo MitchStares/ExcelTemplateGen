@@ -63,7 +63,7 @@ export function AIChatPanel({ templateId, config, onGenerate, isGenerating }: Pr
       <div className="rounded-xl border border-blue-100 bg-blue-50 px-4 py-3 text-sm text-blue-700">
         Describe your Azure resources in plain English.{" "}
         <em className="not-italic opacity-75">
-          e.g. "1 Fabric F64 in prod, 2 Key Vaults, 3 storage accounts LRS in dev"
+          e.g. &quot;1 Fabric F64 in prod, 2 Key Vaults, 3 storage accounts LRS in dev&quot;
         </em>
       </div>
 

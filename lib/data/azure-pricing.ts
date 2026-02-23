@@ -31,6 +31,7 @@ let _pricingLookupCache: AzurePricingLookup | undefined;
 
 function getPricingLookup(): AzurePricingLookup {
   if (!_pricingLookupCache) {
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
     _pricingLookupCache = require('./azure-pricing-lookup.json') as AzurePricingLookup;
   }
   return _pricingLookupCache;
