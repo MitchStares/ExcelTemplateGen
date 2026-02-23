@@ -1,10 +1,11 @@
 import type { TemplateDefinition, TemplateConfig, PreviewRow } from "@/types/templates";
 import ExcelJS from "exceljs";
+import { azurePricingLookup, findPricing, getServiceSkus, getMonthlyFromHourly } from "@/lib/data/azure-pricing";
 
 export const azureCalculatorTemplate: TemplateDefinition = {
   id: "azure-calculator",
   name: "Azure Platform Calculator",
-  description: "Azure resource cost estimation template with resource types, SKUs, regions, and monthly/annual cost projections. Stub — populate with your pricing data.",
+  description: "Azure resource cost estimation template with real pricing data for Australia East region. Includes pricing reference sheet with 1,900+ SKUs across compute, storage, databases, and networking services.",
   category: "azure",
   icon: "☁️",
   tags: ["azure", "cloud", "cost", "calculator", "infrastructure"],
@@ -243,9 +244,9 @@ export async function generateAzureCalculatorWorkbook(config: TemplateConfig): P
 
   // NOTE row
   sheet.mergeCells(r, 1, r, TOTAL_COLS);
-  sheet.getCell(r, 1).value = "⚠️  STUB TEMPLATE — Replace unit costs with actual Azure pricing from https://azure.microsoft.com/en-au/pricing/calculator/";
-  sheet.getCell(r, 1).font = { name: "Calibri", size: 9, italic: true, color: { argb: "FF8B4513" } };
-  sheet.getCell(r, 1).fill = { type: "pattern", pattern: "solid", fgColor: { argb: "FFFFF3CD" } };
+  sheet.getCell(r, 1).value = `ℹ️  Pricing data from Azure Retail Prices API (${azurePricingLookup.region}) — See "Pricing Reference" sheet for available services and SKUs`;
+  sheet.getCell(r, 1).font = { name: "Calibri", size: 9, italic: true, color: { argb: "FF0066CC" } };
+  sheet.getCell(r, 1).fill = { type: "pattern", pattern: "solid", fgColor: { argb: "FFE6F2FF" } };
   sheet.getCell(r, 1).alignment = { horizontal: "center", vertical: "middle" };
   sheet.getRow(r).height = 14;
   r++;
@@ -401,5 +402,96 @@ export async function generateAzureCalculatorWorkbook(config: TemplateConfig): P
   });
 
   void categoryEndRows;
+
+  // ── Pricing Reference Sheet ────────────────────────────────────────────────
+  const pricingSheet = workbook.addWorksheet("Pricing Reference");
+  pricingSheet.getColumn(1).width = 35;  // Service Name
+  pricingSheet.getColumn(2).width = 40;  // SKU Name
+  pricingSheet.getColumn(3).width = 20;  // Service Family
+  pricingSheet.getColumn(4).width = 18;  // Unit Price
+  pricingSheet.getColumn(5).width = 18;  // Monthly (est)
+  pricingSheet.getColumn(6).width = 20;  // Unit of Measure
+
+  let pr = 1;
+
+  // Title
+  pricingSheet.mergeCells(pr, 1, pr, 6);
+  const pricingTitleCell = pricingSheet.getCell(pr, 1);
+  pricingTitleCell.value = "Azure Pricing Reference — Australia East";
+  pricingTitleCell.alignment = { horizontal: "center", vertical: "middle" };
+  pricingSheet.getRow(pr).height = 28;
+  applyHeaderStyle(pricingTitleCell, config.headerColor as string);
+  pricingTitleCell.font = { ...pricingTitleCell.font, size: 14 };
+  pr++;
+
+  // Info row
+  pricingSheet.mergeCells(pr, 1, pr, 6);
+  pricingSheet.getCell(pr, 1).value = `Currency: ${azurePricingLookup.currency}  |  Region: ${azurePricingLookup.region}  |  Generated: ${new Date(azurePricingLookup.generatedAt).toLocaleDateString("en-AU")}`;
+  pricingSheet.getCell(pr, 1).font = { name: "Calibri", size: 9, italic: true };
+  pricingSheet.getCell(pr, 1).alignment = { horizontal: "center", vertical: "middle" };
+  pricingSheet.getRow(pr).height = 14;
+  pr++;
+  pr++; // blank
+
+  // Column headers
+  const pricingHeaders = ["Service Name", "SKU Name", "Service Family", `Unit Price (${sym})`, `Monthly Est. (${sym})`, "Unit of Measure"];
+  const pricingHeaderRow = pricingSheet.getRow(pr);
+  pricingHeaderRow.height = 24;
+  pricingHeaders.forEach((h, i) => {
+    pricingHeaderRow.getCell(i + 1).value = h;
+    applyHeaderStyle(pricingHeaderRow.getCell(i + 1), config.headerColor as string);
+    pricingHeaderRow.getCell(i + 1).alignment = { horizontal: "center", vertical: "middle", wrapText: true };
+  });
+  pr++;
+
+  // Add pricing data rows
+  const pricingEntries = Object.entries(azurePricingLookup.pricing);
+  pricingEntries.forEach(([key, entry], idx) => {
+    const [serviceName, skuName] = key.split('|');
+    const row = pricingSheet.getRow(pr);
+    row.height = 18;
+
+    // Service Name
+    row.getCell(1).value = serviceName;
+    applyDataStyle(row.getCell(1), idx % 2 === 0 ? "#F9FAFB" : undefined);
+
+    // SKU Name
+    row.getCell(2).value = skuName;
+    applyDataStyle(row.getCell(2), idx % 2 === 0 ? "#F9FAFB" : undefined);
+
+    // Service Family
+    row.getCell(3).value = entry.family;
+    row.getCell(3).alignment = { horizontal: "center" };
+    applyDataStyle(row.getCell(3), idx % 2 === 0 ? "#F9FAFB" : undefined);
+
+    // Unit Price
+    row.getCell(4).value = entry.price;
+    row.getCell(4).numFmt = `"${sym}"#,##0.0000`;
+    row.getCell(4).alignment = { horizontal: "right" };
+    applyDataStyle(row.getCell(4), idx % 2 === 0 ? "#FFF9E6" : "#FEFDF5");
+
+    // Monthly Estimate (convert hourly to monthly if applicable)
+    const monthlyEst = entry.unit.includes('Hour') ? getMonthlyFromHourly(entry.price) : entry.price;
+    row.getCell(5).value = monthlyEst;
+    row.getCell(5).numFmt = `"${sym}"#,##0.00`;
+    row.getCell(5).alignment = { horizontal: "right" };
+    applyDataStyle(row.getCell(5), idx % 2 === 0 ? "#E6F2FF" : "#F5FAFF");
+
+    // Unit of Measure
+    row.getCell(6).value = entry.unit;
+    applyDataStyle(row.getCell(6), idx % 2 === 0 ? "#F9FAFB" : undefined);
+
+    pr++;
+  });
+
+  // Add auto-filter
+  pricingSheet.autoFilter = {
+    from: { row: 4, column: 1 },
+    to: { row: pr - 1, column: 6 }
+  };
+
+  // Freeze the header rows
+  pricingSheet.views = [{ state: "frozen", xSplit: 0, ySplit: 4 }];
+
   return workbook;
 }

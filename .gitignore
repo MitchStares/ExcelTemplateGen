@@ -39,3 +39,11 @@ yarn-error.log*
 # typescript
 *.tsbuildinfo
 next-env.d.ts
+
+# large data files - keep only the lookup
+lib/data/azure-pricing-aud.json
+lib/data/azure-pricing-aud-*.json
+!lib/data/azure-pricing-lookup.json
+
+# claude code settings
+.claude/
