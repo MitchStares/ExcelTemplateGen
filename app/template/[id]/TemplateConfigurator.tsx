@@ -5,6 +5,9 @@ import type { SerializableTemplate, TemplateConfig, PreviewRow } from "@/types/t
 import { previewGenerators } from "@/lib/previews";
 import { ConfigField } from "@/components/ConfigField";
 import { PreviewPane } from "@/components/PreviewPane";
+import { TemplateModeSwitcher } from "@/components/TemplateModeSwitcher";
+import { AIChatPanel } from "@/components/AIChatPanel";
+import type { AzureResource } from "@/types/templates";
 
 interface Props {
   template: SerializableTemplate;
@@ -92,70 +95,120 @@ export function TemplateConfigurator({ template }: Props) {
     }
   };
 
+  const handleAIGenerate = async (resources: AzureResource[]) => {
+    setIsGenerating(true);
+    setError(null);
+
+    try {
+      const response = await fetch("/api/generate", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ templateId: template.id, config: { ...config, resources } }),
+      });
+
+      if (!response.ok) {
+        const data = await response.json().catch(() => ({})) as { error?: string };
+        throw new Error(data.error || `Server error: ${response.status}`);
+      }
+
+      const blob = await response.blob();
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      const filename = `${(config.projectName as string || template.name).replace(/[^a-z0-9]/gi, "_")}_${template.id}_ai.xlsx`;
+      a.href = url;
+      a.download = filename;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+      setLastDownloaded(filename);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to generate template");
+    } finally {
+      setIsGenerating(false);
+    }
+  };
+
   return (
     <div className="mx-auto max-w-7xl px-6 py-8">
       <div className="grid grid-cols-1 gap-8 lg:grid-cols-[380px_1fr]">
         {/* ── Left panel: Configuration ──────────────────────────────────────── */}
         <aside className="space-y-4">
-          {/* Template info */}
-          <div className="rounded-2xl border border-gray-200 bg-white p-5 shadow-sm">
-            <div className="mb-3 flex items-center gap-3">
-              <span className="text-3xl">{template.icon}</span>
-              <div>
-                <h1 className="text-base font-bold text-gray-900">{template.name}</h1>
-                <p className="text-xs text-gray-500">{template.description}</p>
-              </div>
-            </div>
-            <div className="flex flex-wrap gap-1.5">
-              {template.tags.map((tag) => (
-                <span key={tag} className="rounded-md bg-gray-100 px-2 py-0.5 text-xs text-gray-500">
-                  {tag}
-                </span>
-              ))}
-            </div>
-          </div>
+          <TemplateModeSwitcher
+            manualContent={
+              <>
+                {/* Template info */}
+                <div className="rounded-2xl border border-gray-200 bg-white p-5 shadow-sm">
+                  <div className="mb-3 flex items-center gap-3">
+                    <span className="text-3xl">{template.icon}</span>
+                    <div>
+                      <h1 className="text-base font-bold text-gray-900">{template.name}</h1>
+                      <p className="text-xs text-gray-500">{template.description}</p>
+                    </div>
+                  </div>
+                  <div className="flex flex-wrap gap-1.5">
+                    {template.tags.map((tag) => (
+                      <span key={tag} className="rounded-md bg-gray-100 px-2 py-0.5 text-xs text-gray-500">
+                        {tag}
+                      </span>
+                    ))}
+                  </div>
+                </div>
 
-          {/* Field groups */}
-          {Object.entries(fieldGroups.groups).map(([groupName, fields]) => (
-            <div key={groupName} className="rounded-2xl border border-gray-200 bg-white p-5 shadow-sm">
-              <h3 className="mb-4 text-xs font-semibold uppercase tracking-wider text-gray-400">{groupName}</h3>
-              <div className="space-y-4">
-                {fields.map((field) => (
-                  <ConfigField
-                    key={field.key}
-                    field={field}
-                    value={config[field.key]}
-                    onChange={handleChange}
-                  />
+                {/* Field groups */}
+                {Object.entries(fieldGroups.groups).map(([groupName, fields]) => (
+                  <div key={groupName} className="rounded-2xl border border-gray-200 bg-white p-5 shadow-sm">
+                    <h3 className="mb-4 text-xs font-semibold uppercase tracking-wider text-gray-400">{groupName}</h3>
+                    <div className="space-y-4">
+                      {fields.map((field) => (
+                        <ConfigField
+                          key={field.key}
+                          field={field}
+                          value={config[field.key]}
+                          onChange={handleChange}
+                        />
+                      ))}
+                    </div>
+                  </div>
                 ))}
-              </div>
-            </div>
-          ))}
 
-          {/* Ungrouped fields */}
-          {fieldGroups.ungrouped.length > 0 && (
-            <div className="rounded-2xl border border-gray-200 bg-white p-5 shadow-sm">
-              <div className="space-y-4">
-                {fieldGroups.ungrouped.map((field) => (
-                  <ConfigField
-                    key={field.key}
-                    field={field}
-                    value={config[field.key]}
-                    onChange={handleChange}
-                  />
-                ))}
-              </div>
-            </div>
-          )}
+                {/* Ungrouped fields */}
+                {fieldGroups.ungrouped.length > 0 && (
+                  <div className="rounded-2xl border border-gray-200 bg-white p-5 shadow-sm">
+                    <div className="space-y-4">
+                      {fieldGroups.ungrouped.map((field) => (
+                        <ConfigField
+                          key={field.key}
+                          field={field}
+                          value={config[field.key]}
+                          onChange={handleChange}
+                        />
+                      ))}
+                    </div>
+                  </div>
+                )}
 
-          {/* Reset */}
-          <button
-            type="button"
-            onClick={handleReset}
-            className="w-full rounded-xl border border-gray-200 bg-white py-2 text-sm text-gray-500 hover:bg-gray-50 hover:text-gray-700 transition"
-          >
-            Reset to defaults
-          </button>
+                {/* Reset */}
+                <button
+                  type="button"
+                  onClick={handleReset}
+                  className="w-full rounded-xl border border-gray-200 bg-white py-2 text-sm text-gray-500 hover:bg-gray-50 hover:text-gray-700 transition"
+                >
+                  Reset to defaults
+                </button>
+              </>
+            }
+            chatContent={
+              template.id === "azure-calculator" ? (
+                <AIChatPanel
+                  templateId={template.id}
+                  config={config}
+                  onGenerate={handleAIGenerate}
+                  isGenerating={isGenerating}
+                />
+              ) : undefined
+            }
+          />
         </aside>
 
         {/* ── Right panel: Preview + Generate ───────────────────────────────── */}
