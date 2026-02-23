@@ -1,4 +1,4 @@
-import type { TemplateDefinition, TemplateConfig, PreviewRow } from "@/types/templates";
+import type { TemplateDefinition, TemplateConfig, PreviewRow, AzureResource } from "@/types/templates";
 import ExcelJS from "exceljs";
 import { azurePricingLookup, findPricing, getServiceSkus, getMonthlyFromHourly } from "@/lib/data/azure-pricing";
 
@@ -194,6 +194,111 @@ function addCategoryBlock(
   return r;
 }
 
+function addRealResourceBlock(
+  sheet: ExcelJS.Worksheet,
+  startRow: number,
+  category: string,
+  catResources: AzureResource[],
+  totalCols: number,
+  headerColor: string,
+  sym: string,
+): number {
+  let r = startRow;
+
+  // Category header
+  sheet.mergeCells(r, 1, r, totalCols);
+  const catCell = sheet.getCell(r, 1);
+  catCell.value = `▶  ${category.toUpperCase()}`;
+  catCell.alignment = { horizontal: "left", vertical: "middle" };
+  catCell.fill = { type: "pattern", pattern: "solid", fgColor: { argb: "FF034078" } };
+  catCell.font = { bold: true, name: "Calibri", size: 10, color: { argb: "FFFFFFFF" } };
+  sheet.getRow(r).height = 18;
+  r++;
+
+  catResources.forEach((resource, i) => {
+    const row = sheet.getRow(r);
+    row.height = 18;
+
+    row.getCell(1).value = resource.name;
+    applyDataStyle(row.getCell(1), i % 2 === 0 ? "#F0F7FF" : undefined);
+
+    row.getCell(2).value = resource.skuName;
+    row.getCell(2).alignment = { horizontal: "center" };
+    applyDataStyle(row.getCell(2), i % 2 === 0 ? "#F9FAFB" : undefined);
+
+    row.getCell(3).value = resource.serviceName;
+    applyDataStyle(row.getCell(3), i % 2 === 0 ? "#F9FAFB" : undefined);
+
+    row.getCell(4).value = resource.environment;
+    row.getCell(4).alignment = { horizontal: "center" };
+    applyDataStyle(row.getCell(4), i % 2 === 0 ? "#F9FAFB" : undefined);
+
+    row.getCell(5).value = resource.quantity;
+    row.getCell(5).numFmt = "0";
+    row.getCell(5).alignment = { horizontal: "center" };
+    applyDataStyle(row.getCell(5), i % 2 === 0 ? "#F9FAFB" : undefined);
+
+    row.getCell(6).value = resource.unitMonthlyCost;
+    row.getCell(6).numFmt = `"${sym}"#,##0.00`;
+    row.getCell(6).alignment = { horizontal: "right" };
+    applyDataStyle(row.getCell(6), i % 2 === 0 ? "#FFF9E6" : "#FEFDF5");
+
+    row.getCell(7).value = { formula: `E${r}*F${r}` };
+    row.getCell(7).numFmt = `"${sym}"#,##0.00`;
+    row.getCell(7).alignment = { horizontal: "right" };
+    applyDataStyle(row.getCell(7), i % 2 === 0 ? "#EBF5FB" : "#F5FBFF");
+
+    row.getCell(8).value = { formula: `G${r}*12` };
+    row.getCell(8).numFmt = `"${sym}"#,##0.00`;
+    row.getCell(8).alignment = { horizontal: "right" };
+    applyDataStyle(row.getCell(8), i % 2 === 0 ? "#EBF5FB" : "#F5FBFF");
+
+    if (totalCols >= 9) {
+      row.getCell(9).value = resource.notes ?? "";
+      applyDataStyle(row.getCell(9), i % 2 === 0 ? "#F9FAFB" : undefined);
+    }
+
+    r++;
+  });
+
+  // Subtotal row
+  const stRow = sheet.getRow(r);
+  stRow.height = 18;
+  sheet.mergeCells(r, 1, r, 4);
+  stRow.getCell(1).value = `${category} Subtotal`;
+  stRow.getCell(1).alignment = { horizontal: "right", vertical: "middle" };
+  applyHeaderStyle(stRow.getCell(1), headerColor);
+  stRow.getCell(1).font = { bold: true, name: "Calibri", size: 10, color: { argb: "FFFFFFFF" } };
+
+  stRow.getCell(5).value = { formula: `SUM(E${startRow + 1}:E${r - 1})` };
+  stRow.getCell(5).numFmt = "0";
+  stRow.getCell(5).alignment = { horizontal: "center" };
+  applyHeaderStyle(stRow.getCell(5), headerColor);
+
+  stRow.getCell(6).value = "";
+  applyHeaderStyle(stRow.getCell(6), headerColor);
+
+  stRow.getCell(7).value = { formula: `SUM(G${startRow + 1}:G${r - 1})` };
+  stRow.getCell(7).numFmt = `"${sym}"#,##0.00`;
+  stRow.getCell(7).alignment = { horizontal: "right" };
+  applyHeaderStyle(stRow.getCell(7), headerColor);
+
+  stRow.getCell(8).value = { formula: `SUM(H${startRow + 1}:H${r - 1})` };
+  stRow.getCell(8).numFmt = `"${sym}"#,##0.00`;
+  stRow.getCell(8).alignment = { horizontal: "right" };
+  applyHeaderStyle(stRow.getCell(8), headerColor);
+
+  if (totalCols >= 9) {
+    stRow.getCell(9).value = "";
+    applyHeaderStyle(stRow.getCell(9), headerColor);
+  }
+
+  r++;
+  r++; // blank gap
+
+  return r;
+}
+
 export async function generateAzureCalculatorWorkbook(config: TemplateConfig): Promise<ExcelJS.Workbook> {
   const workbook = new ExcelJS.Workbook();
   workbook.creator = config.companyName as string;
@@ -263,15 +368,33 @@ export async function generateAzureCalculatorWorkbook(config: TemplateConfig): P
   });
   r++;
 
-  // Category blocks
+  // Category blocks — use AI-resolved resources if present, otherwise generic placeholders
   const categoryStartRows: number[] = [];
   const categoryEndRows: number[] = [];
+  const aiResources = config.resources as unknown as AzureResource[] | undefined;
 
-  categories.forEach((cat) => {
-    categoryStartRows.push(r);
-    r = addCategoryBlock(sheet, r, cat, resourcesPerCategory, TOTAL_COLS, config.headerColor as string, sym);
-    categoryEndRows.push(r - 2); // -2 for blank gap and subtotal
-  });
+  if (aiResources && aiResources.length > 0) {
+    // Group resources by category, preserving insertion order
+    const byCategory = new Map<string, AzureResource[]>();
+    for (const resource of aiResources) {
+      const cat = resource.category || "Other";
+      if (!byCategory.has(cat)) byCategory.set(cat, []);
+      byCategory.get(cat)!.push(resource);
+    }
+
+    byCategory.forEach((catResources, category) => {
+      categoryStartRows.push(r);
+      r = addRealResourceBlock(sheet, r, category, catResources, TOTAL_COLS, config.headerColor as string, sym);
+      categoryEndRows.push(r - 2);
+    });
+  } else {
+    // Original placeholder path
+    categories.forEach((cat) => {
+      categoryStartRows.push(r);
+      r = addCategoryBlock(sheet, r, cat, resourcesPerCategory, TOTAL_COLS, config.headerColor as string, sym);
+      categoryEndRows.push(r - 2); // -2 for blank gap and subtotal
+    });
+  }
 
   // Grand totals
   r++;
@@ -283,11 +406,8 @@ export async function generateAzureCalculatorWorkbook(config: TemplateConfig): P
   applyHeaderStyle(grandTotalRow.getCell(1), config.accentColor as string);
   grandTotalRow.getCell(1).font = { bold: true, name: "Calibri", size: 11, color: { argb: "FF003087" } };
 
-  // Sum all G column subtotals
-  const subtotalRows = categoryStartRows.map((s, i) => {
-    const catEnd = s + resourcesPerCategory; // subtotal row
-    return `G${catEnd + 1}`;
-  });
+  // Sum all G column subtotals — categoryEndRows holds the actual subtotal row for each block
+  const subtotalRows = categoryEndRows.map((endRow) => `G${endRow}`);
   const monthlyFormula = subtotalRows.join("+");
 
   grandTotalRow.getCell(7).value = { formula: monthlyFormula };
