@@ -17,6 +17,7 @@ interface Props {
 }
 
 const CURRENCY_SYMBOLS: Record<string, string> = { AUD: "$", USD: "$", GBP: "£" };
+const CURRENCY_LOCALES: Record<string, string> = { AUD: "en-AU", USD: "en-US", GBP: "en-GB" };
 
 export function AIChatPanel({ templateId, config, onGenerate, isGenerating }: Props) {
   const [message, setMessage] = useState("");
@@ -24,7 +25,9 @@ export function AIChatPanel({ templateId, config, onGenerate, isGenerating }: Pr
   const [error, setError] = useState<string | null>(null);
   const [result, setResult] = useState<ResolvedResult | null>(null);
 
-  const sym = CURRENCY_SYMBOLS[config.currency as string] ?? "$";
+  const currency = config.currency as string;
+  const sym = CURRENCY_SYMBOLS[currency] ?? "$";
+  const locale = CURRENCY_LOCALES[currency] ?? "en-AU";
 
   const handleAnalyse = async () => {
     if (!message.trim()) return;
@@ -90,7 +93,7 @@ export function AIChatPanel({ templateId, config, onGenerate, isGenerating }: Pr
         >
           {isAnalysing ? (
             <>
-              <svg className="h-4 w-4 animate-spin" fill="none" viewBox="0 0 24 24">
+              <svg aria-hidden="true" className="h-4 w-4 animate-spin" fill="none" viewBox="0 0 24 24">
                 <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
                 <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
               </svg>
@@ -142,7 +145,7 @@ export function AIChatPanel({ templateId, config, onGenerate, isGenerating }: Pr
                   </div>
                   <div className="ml-3 shrink-0 text-right font-mono text-sm text-gray-700">
                     {sym}
-                    {(resource.unitMonthlyCost * resource.quantity).toLocaleString("en-AU", {
+                    {(resource.unitMonthlyCost * resource.quantity).toLocaleString(locale, {
                       minimumFractionDigits: 0,
                       maximumFractionDigits: 0,
                     })}
@@ -155,7 +158,7 @@ export function AIChatPanel({ templateId, config, onGenerate, isGenerating }: Pr
               <span className="text-sm font-semibold text-gray-600">Est. monthly total</span>
               <span className="font-mono text-base font-bold text-gray-900">
                 {sym}
-                {result.totalMonthly.toLocaleString("en-AU", {
+                {result.totalMonthly.toLocaleString(locale, {
                   minimumFractionDigits: 0,
                   maximumFractionDigits: 0,
                 })}
@@ -173,7 +176,7 @@ export function AIChatPanel({ templateId, config, onGenerate, isGenerating }: Pr
           >
             {isGenerating ? (
               <>
-                <svg className="h-5 w-5 animate-spin" fill="none" viewBox="0 0 24 24">
+                <svg aria-hidden="true" className="h-5 w-5 animate-spin" fill="none" viewBox="0 0 24 24">
                   <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
                   <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
                 </svg>

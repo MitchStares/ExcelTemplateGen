@@ -76,6 +76,10 @@ export async function POST(
     return NextResponse.json({ error: 'message is required' }, { status: 400 });
   }
 
+  if (body.message.length > 2000) {
+    return NextResponse.json({ error: 'Message too long (max 2000 characters)' }, { status: 400 });
+  }
+
   try {
     const catalogueText = getServiceCatalogueText();
     const systemPrompt = AZURE_SYSTEM_PROMPT + catalogueText;

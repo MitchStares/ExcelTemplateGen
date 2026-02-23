@@ -1,6 +1,6 @@
 import type { TemplateDefinition, TemplateConfig, PreviewRow, AzureResource } from "@/types/templates";
 import ExcelJS from "exceljs";
-import { azurePricingLookup, findPricing, getServiceSkus, getMonthlyFromHourly } from "@/lib/data/azure-pricing";
+import { azurePricingLookup, getMonthlyFromHourly } from "@/lib/data/azure-pricing";
 
 export const azureCalculatorTemplate: TemplateDefinition = {
   id: "azure-calculator",
@@ -369,7 +369,6 @@ export async function generateAzureCalculatorWorkbook(config: TemplateConfig): P
   r++;
 
   // Category blocks — use AI-resolved resources if present, otherwise generic placeholders
-  const categoryStartRows: number[] = [];
   const categoryEndRows: number[] = [];
   const aiResources = config.resources as unknown as AzureResource[] | undefined;
 
@@ -383,14 +382,12 @@ export async function generateAzureCalculatorWorkbook(config: TemplateConfig): P
     }
 
     byCategory.forEach((catResources, category) => {
-      categoryStartRows.push(r);
       r = addRealResourceBlock(sheet, r, category, catResources, TOTAL_COLS, config.headerColor as string, sym);
       categoryEndRows.push(r - 2);
     });
   } else {
     // Original placeholder path
     categories.forEach((cat) => {
-      categoryStartRows.push(r);
       r = addCategoryBlock(sheet, r, cat, resourcesPerCategory, TOTAL_COLS, config.headerColor as string, sym);
       categoryEndRows.push(r - 2); // -2 for blank gap and subtotal
     });
@@ -520,8 +517,6 @@ export async function generateAzureCalculatorWorkbook(config: TemplateConfig): P
       applyDataStyle(eRow.getCell(ei + 2), ri % 2 === 0 ? "#F9FAFB" : undefined);
     });
   });
-
-  void categoryEndRows;
 
   // ── Pricing Reference Sheet ────────────────────────────────────────────────
   const pricingSheet = workbook.addWorksheet("Pricing Reference");
